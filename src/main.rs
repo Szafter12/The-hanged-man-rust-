@@ -1,20 +1,27 @@
-use rand::Rng;
 use std::io;
 use std::io::stdin;
+use reqwest;
+use serde_json::Value;
+use tokio;
 
 enum GuessError {
     NotFound,
 }
 
 fn main() {
-    let words: [String; 3] = ["essa".to_string(), "jaja".to_string(), "dupa".to_string()];
-
-    // Get random word from words array
-    let rand_word_index = rand::rng().random_range(0..2);
-    let word: &String = &words[rand_word_index];
+    let mut health = 10;
+    let word: String = match get_word() {
+        Ok(str) => str,
+        Err(_) => {
+            println!("word from API is missing");
+            return;
+        }
+    };
 
     // Hash word
-    let mut hash_word = hash_word(word);
+    let mut hash_word = hash_word(&word);
+
+    let mut guessed_letters: Vec<char> = Vec::new();
 
     loop {
         println!("The word: {}", hash_word);
@@ -36,12 +43,27 @@ fn main() {
             };
         };
 
-        match check_guess(guessed_letter, word) {
+        guessed_letters.push(guessed_letter);
+
+        match check_guess(&mut guessed_letters, &word) {
             Ok(guess_word) => {
                 println!("Nice! you guess a letter");
                 hash_word = guess_word;
             }
             Err(_) => println!("The word don't contains guessed letter try again"),
+        }
+
+        if is_win(&hash_word) {
+            println!("You win!!!");
+            println!("The word was {}", word);
+            break;
+        } else {
+            health -= 1;
+            if health <= 0 {
+                println!("You lose the word was {}", word);
+                break;
+            }
+            continue;
         }
     }
 }
@@ -52,7 +74,7 @@ fn get_user_typed_letter() -> Result<String, io::Error> {
     let mut guessed_letter = String::new();
 
     stdin().read_line(&mut guessed_letter)?;
-    let guessed_letter = guessed_letter.to_lowercase();
+
     return Ok(guessed_letter);
 }
 
@@ -71,20 +93,55 @@ fn hash_word(word: &String) -> String {
     hash_word
 }
 
-fn check_guess(guess: char, word: &String) -> Result<String, GuessError> {
-    if word.to_lowercase().contains(guess) {
-        let mut guessed_hash_word = String::new();
-        for el in word.chars() {
-            if el == guess {
-                guessed_hash_word.push(el);
-                continue;
-            }
+fn check_guess(guessed_letters: &mut Vec<char>, word: &String) -> Result<String, GuessError> {
+    let last_guess = match guessed_letters.last() {
+        Some(&c) => c,
+        None => return Err(GuessError::NotFound),
+    };
 
-            guessed_hash_word.push("_".chars().next().unwrap());
+    if word.contains(last_guess) {
+        let mut guess_hash_word: String = String::new();
+
+        for el in word.chars() {
+            if guessed_letters.contains(&el) {
+                guess_hash_word.push(el);
+            } else {
+                guess_hash_word.push_str(" _ ");
+            }
         }
 
-        Ok(guessed_hash_word)
+        Ok(guess_hash_word)
     } else {
+        guessed_letters.pop();
         Err(GuessError::NotFound)
     }
+}
+
+fn is_win(word: &String) -> bool {
+    if !word.contains("_") {
+        true
+    } else {
+        false
+    }
+}
+
+#[tokio::main]
+async fn get_word() -> Result<String, Box<dyn std::error::Error>> {
+
+    let url = "https://random-word-api.herokuapp.com/word?number=1";
+
+    let client = reqwest::Client::new();
+
+    // Wysyłamy GET
+    let res = client.get(url)
+        .send()
+        .await?;
+
+    // Parsowanie odpowiedzi jako JSON
+    let json: Value = res.json().await?;
+    let word = json.get(0)
+        .and_then(|c| c.as_str())
+        .ok_or("The word from api is missing")?;
+
+    return Ok(word.to_string());
 }
