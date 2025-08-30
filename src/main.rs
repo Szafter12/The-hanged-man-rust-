@@ -18,7 +18,6 @@ fn main() {
         }
     };
 
-    // Hash word
     let mut hash_word = hash_word(&word);
 
     let mut guessed_letters: Vec<char> = Vec::new();
@@ -47,10 +46,13 @@ fn main() {
 
         match check_guess(&mut guessed_letters, &word) {
             Ok(guess_word) => {
-                println!("Nice! you guess a letter");
+                println!("Correct!");
                 hash_word = guess_word;
             }
-            Err(_) => println!("The word don't contains guessed letter try again"),
+            Err(_) => {
+                health -= 1;
+                println!("Incorrect! Health left {}", health);
+            },
         }
 
         if is_win(&hash_word) {
@@ -58,7 +60,6 @@ fn main() {
             println!("The word was {}", word);
             break;
         } else {
-            health -= 1;
             if health <= 0 {
                 println!("You lose the word was {}", word);
                 break;
@@ -128,7 +129,7 @@ fn is_win(word: &String) -> bool {
 #[tokio::main]
 async fn get_word() -> Result<String, Box<dyn std::error::Error>> {
 
-    let url = "https://random-word-api.herokuapp.com/word?number=1";
+    let url = "https://random-word-api.vercel.app/api?words=1";
 
     let client = reqwest::Client::new();
 
